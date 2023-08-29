@@ -1,0 +1,169 @@
+/@version=5
+// Copyright by KINA - 2023
+// RSI with Close & Tail Divergences v1.0
+// Free for private use
+indicator("RSI with Close & Tail Divergences", shorttitle="RSI C/T Div", overlay=false, max_labels_count = 500)
+
+len = input.int(title="RSI Length", defval = 14)
+oBought = input.float(70, title="Overbought Level", display = display.none)
+oSold = input.float(30, title="Oversold Level", display = display.none)
+hidePivot = input(false,"Hide pivots")
+hideDivLine = input(false,"Hide Divergence Lines")
+shortLabel = input(false,"Shorter labels")
+hideLabelBg = input(false, "Hide labels and color background")
+calcBars = input.int(title="Divergence lookback period (bars)", defval = 14, display = display.none)
+divSigLineColor = input.color(title="Divergence Signal Line Color", defval = color.yellow)
+labelSize = input.string("tiny", title="Label size", options=["tiny", "small", "normal", "large"], display = display.none)
+
+var float max_close = na
+var float min_close = na
+var float max_high = na
+var float min_low = na
+var float max_rsi = na
+var float min_rsi = na
+var bool pivot_high = na
+var bool pivot_low = na
+var bool divbear_close = na
+var bool divbull_close = na
+var bool divbear_high = na
+var bool divbull_low = na
+var label l = na
+
+// RSI code
+rsi = ta.rsi(close, len)
+
+// RSI Line Color and Plot
+plotColor = rsi > oBought ? color.red : rsi < oSold ? #00e676 : color.new(color.white, 50)
+plot(rsi, color = plotColor, title="RSI Line Colors")
+
+hline(oBought, color=color.purple, title="Overbought Level Line")
+hline(oSold, color=color.purple, title="Oversold Level Line")
+
+hb = math.abs(ta.highestbars(rsi, calcBars))
+lb = math.abs(ta.lowestbars(rsi, calcBars))
+
+max_rsi := hb == 0 ? rsi : na(max_rsi[1]) ? rsi : max_rsi[1]
+min_rsi := lb == 0 ? rsi : na(min_rsi[1]) ? rsi : min_rsi[1]
+
+// Divergences for Close
+max_close := hb == 0 ? close : na(max_close[1]) ? close : max_close[1]
+min_close := lb == 0 ? close : na(min_close[1]) ? close : min_close[1]
+divbear_close := (max_close[1] > max_close[2]) and (rsi[1] < max_rsi) and (rsi <= rsi[1])
+divbull_close := (min_close[1] < min_close[2]) and (rsi[1] > min_rsi) and (rsi >= rsi[1])
+
+// Divergences for Highs/Lows
+max_high := hb == 0 ? high : na(max_high[1]) ? high : max_high[1]
+min_low := lb == 0 ? low : na(min_low[1]) ? low : min_low[1]
+divbear_high := (max_high[1] > max_high[2]) and (rsi[1] < max_rsi) and (rsi <= rsi[1])
+divbull_low := (min_low[1] < min_low[2]) and (rsi[1] > min_rsi) and (rsi >= rsi[1])
+
+// Compare high of current bar being examined with previous bar's high
+if close > max_close
+    max_close := close
+if rsi > max_rsi
+    max_rsi := rsi
+if close < min_close
+    min_close := close
+if rsi < min_rsi
+    min_rsi := rsi
+
+if high > max_high
+    max_high := high
+if rsi > max_rsi
+    max_rsi := rsi
+if low < min_low
+    min_low := low
+if rsi < min_rsi
+    min_rsi := rsi
+
+// Finds pivot point with at least 2 right candles with lower value
+pivot_high := (max_rsi == max_rsi[2]) and (max_rsi[2] != max_rsi[3]) ? true : na
+pivot_low := (min_rsi == min_rsi[2]) and (min_rsi[2] != min_rsi[3]) ? true : na
+
+color_bear_both_def = color.new(color.red, 0) 
+color_bull_both_def = color.new(color.green, 0)
+color_bear_h_def = color.new(color.orange, 75)
+color_bull_l_def = color.new(color.teal, 75)
+color_bear_c_def = color.new(color.red, 75)
+color_bull_c_def = color.new(color.green, 75)
+color_pivot_def = color.blue
+
+color_bear_both = input.color(color_bear_both_def, title="BEAR-BOTH Color")
+color_bull_both = input.color(color_bull_both_def, title="BULL-BOTH Color")
+color_bear_h = input.color(color_bear_h_def, title="BEAR-H Color")
+color_bull_l = input.color(color_bull_l_def, title="BULL-L Color")
+color_bear_c = input.color(color_bear_c_def, title="BEAR-C Color")
+color_bull_c = input.color(color_bull_c_def, title="BULL-C Color")
+color_pivot = input.color(color_pivot_def, title="PIVOT Color")
+
+
+
+// Labels for Divergences
+if (divbear_close and divbear_high)
+    l := label.new(x=bar_index[1], y=rsi[1]+1.5, text="BOTH", color=color_bear_both, textcolor=color.white, style=label.style_label_down, size=labelSize)
+    if not hideDivLine
+        line.new(x1=bar_index[hb], y1=rsi[hb], x2=bar_index[1], y2=rsi[1], color=divSigLineColor, style = line.style_dashed, width=1)
+
+else if (divbull_close and divbull_low)
+    l := label.new(x=bar_index[1], y=rsi[1]-1.5, text="BOTH", color=color_bull_both, textcolor=color.white, style=label.style_label_up, size=labelSize)
+    if not hideDivLine
+        line.new(x1=bar_index[lb], y1=rsi[lb], x2=bar_index[1], y2=rsi[1], color=divSigLineColor, style = line.style_dashed, width=1)
+
+else if (divbear_high)
+    l := label.new(x=bar_index[1], y=rsi[1]+1, text="HIGH", color=color_bear_h, textcolor=color.white, style=label.style_label_down, size=labelSize)
+    if not hideDivLine
+        line.new(x1=bar_index[hb], y1=rsi[hb], x2=bar_index[1], y2=rsi[1], color=divSigLineColor, style = line.style_dashed, width=1)
+
+else if (divbull_low)
+    l := label.new(x=bar_index[1], y=rsi[1]-1, text="LOW", color=color_bull_l, textcolor=color.white, style=label.style_label_up, size=labelSize)
+    if not hideDivLine
+        line.new(x1=bar_index[lb], y1=rsi[lb], x2=bar_index[1], y2=rsi[1], color=divSigLineColor, style = line.style_dashed, width=1)
+
+
+else if (divbear_close)
+    l := label.new(x=bar_index[1], y=rsi[1]+1, text="CLOSE", color=color_bear_c, textcolor=color.white, style=label.style_label_down, size=labelSize)
+    if not hideDivLine
+        line.new(x1=bar_index[hb], y1=rsi[hb], x2=bar_index[1], y2=rsi[1], color=divSigLineColor, style = line.style_dashed, width=1)
+
+else if (divbull_close)
+    l := label.new(x=bar_index[1], y=rsi[1]-1, text="CLOSE", color=color_bull_c, textcolor=color.white, style=label.style_label_up, size=labelSize)
+    if not hideDivLine
+        line.new(x1=bar_index[lb], y1=rsi[lb], x2=bar_index[1], y2=rsi[1], color=divSigLineColor, style = line.style_dashed, width=1)
+
+else if (pivot_high)
+    l := label.new (bar_index-2, max_rsi+1, "PIVOT", color=color_pivot, textcolor=color.white, style=label.style_label_down, size=labelSize)
+    
+else if (pivot_low)
+    l := label.new (bar_index-2, min_rsi-1, "PIVOT", color=color_pivot, textcolor=color.white, style=label.style_label_up, size=labelSize)
+
+
+// Shorter labels
+if shortLabel
+    label.set_text (l, na)
+// Hides pivots or labels
+if (hidePivot and (pivot_high or pivot_low)) or hideLabelBg
+    label.delete (l)
+
+// Colors indicator background
+var color divergenceBg = na
+if hideLabelBg
+    if (divbear_close and divbear_high)
+        divergenceBg := color_bear_both 
+    else if (divbull_close and divbull_low)
+        divergenceBg := color_bull_both 
+    else if divbear_close
+        divergenceBg := color_bear_c
+    else if divbear_high
+        divergenceBg := color_bear_h
+    else if divbull_close
+        divergenceBg := color_bull_c
+    else if divbull_low
+        divergenceBg := color_bull_l
+    else
+        divergenceBg := na
+bgcolor(divergenceBg, offset=-1, title="Divergence Background Colors")
+
+var color pibotBg = na
+if hideLabelBg and not hidePivot
+    pibotBg := pivot_high or pivot_low ? color.new(color.blue, 50) : na
+bgcolor(pibotBg, offset=-2, title="Pivot Background Color")
